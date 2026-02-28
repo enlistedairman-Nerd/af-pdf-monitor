@@ -1,0 +1,43 @@
+name: Monitor AF PDF
+
+on:
+  workflow_dispatch: # lets you run it manually
+  schedule:
+    # Runs every 6 hours (UTC). Avoid top-of-hour to reduce delays.
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run monitor
+        run: python check_pdf.py
+
+      - name: Show latest result
+        run: cat latest_result.json
+
+      - name: Commit updated state (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json latest_result.json
+          git diff --cached --quiet && echo "No file changes to commit" && exit 0
+          git commit -m "Monitor update: state refresh"
+          git push
