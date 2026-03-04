@@ -1,0 +1,42 @@
+name: Monitor AF PDF
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        run: python check_pdf.py
+
+      - name: Show results
+        run: |
+          ls -la
+          if [ -f latest_result.json ]; then cat latest_result.json; fi
+
+      - name: Commit state files if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json latest_result.json || true
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update PDF monitor state"
+          git push
