@@ -3,7 +3,7 @@ name: Monitor AF PDF
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 */6 * * *" # every 6 hours (UTC)
 
 permissions:
   contents: write
@@ -27,10 +27,53 @@ jobs:
       - name: Run script
         run: python check_pdf.py
 
-      - name: Show results
+      - name: Show results + write summary
         run: |
-          ls -la
-          if [ -f latest_result.json ]; then cat latest_result.json; fi
+          echo "===== latest_result.json ====="
+          if [ -f latest_result.json ]; then
+            cat latest_result.json
+          else
+            echo "latest_result.json not found"
+          fi
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          p = Path("latest_result.json")
+          if not p.exists():
+              raise SystemExit("latest_result.json not found")
+
+          d = json.loads(p.read_text(encoding="utf-8"))
+
+          lines = []
+          lines.append("# AF PDF Monitor Summary")
+          lines.append("")
+          lines.append(f"- **Today (UTC):** {d.get('today_date_utc')}")
+          lines.append(f"- **Last Modified (UTC):** {d.get('last_modified_utc')}")
+          lines.append(f"- **Days Since Update:** {d.get('days_since_last_update')}")
+          lines.append(f"- **Status:** {d.get('visual_status')}")
+          lines.append(f"- **Age Bar:** `{d.get('visual_bar')}`")
+          lines.append(f"- **HTTP Status:** {d.get('http_status')}")
+          lines.append(f"- **Method Used:** {d.get('method_used')}")
+          lines.append(f"- **Changed This Run:** {d.get('changed')}")
+          lines.append("")
+
+          if d.get("hash_check_skipped"):
+              lines.append(f"- **Hash Check:** Skipped ({d.get('hash_check_reason')})")
+          else:
+              lines.append("- **Hash Check:** Completed")
+
+          if d.get("change_reasons"):
+              lines.append("")
+              lines.append("## Change Reasons")
+              for reason in d.get("change_reasons", []):
+                  lines.append(f"- {reason}")
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          summary_path.write_text("\n".join(lines), encoding="utf-8")
+          PY
 
       - name: Commit state files if changed
         run: |
