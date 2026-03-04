@@ -2,7 +2,7 @@ import json
 import hashlib
 from pathlib import Path
 from email.utils import parsedate_to_datetime
-from datetime import timezone
+from datetime import timezone, datetime
 import requests
 
 PDF_URL = "https://static.e-publishing.af.mil/production/1/af_a1/publication/dafi36-2903/dafi36-2903.pdf"
@@ -12,14 +12,15 @@ OUT_FILE = Path("latest_result.json")
 
 def parse_http_date(value):
     if not value:
-        return None
+        return None, None
     try:
         dt = parsedate_to_datetime(value)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc).isoformat()
+        dt_utc = dt.astimezone(timezone.utc)
+        return dt_utc.isoformat(), dt_utc
     except Exception:
-        return None
+        return None, None
 
 
 def sha256_bytes(data):
@@ -41,6 +42,37 @@ def save_json(path, data):
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def build_age_visual(days_since):
+    if days_since is None:
+        return {
+            "visual_status": "⚪ Unknown",
+            "visual_bar": "□□□□□□□□□□",
+            "status_color": "unknown",
+        }
+
+    # Thresholds (edit if you want)
+    if days_since <= 30:
+        status = "🟢 Fresh"
+        color = "green"
+    elif days_since <= 90:
+        status = "🟡 Aging"
+        color = "yellow"
+    else:
+        status = "🔴 Old"
+        color = "red"
+
+    # Cap at 180 days for bar display
+    cap = 180
+    filled = max(0, min(10, round((min(days_since, cap) / cap) * 10)))
+    bar = "■" * filled + "□" * (10 - filled)
+
+    return {
+        "visual_status": status,
+        "visual_bar": bar,
+        "status_color": color,
+    }
+
+
 def main():
     headers = {
         "User-Agent": (
@@ -51,6 +83,8 @@ def main():
         "Accept": "application/pdf,*/*",
         "Accept-Language": "en-US,en;q=0.9",
     }
+
+    now_utc = datetime.now(timezone.utc)
 
     result = {
         "url": PDF_URL,
@@ -63,6 +97,12 @@ def main():
         "etag": None,
         "last_modified_raw": None,
         "last_modified_utc": None,
+        "today_utc": now_utc.isoformat(),
+        "today_date_utc": now_utc.strftime("%Y-%m-%d"),
+        "days_since_last_update": None,
+        "visual_status": None,
+        "visual_bar": None,
+        "status_color": None,
         "sha256": None,
         "hash_check_skipped": False,
         "hash_check_reason": None,
@@ -79,7 +119,16 @@ def main():
     result["content_length"] = r.headers.get("Content-Length")
     result["etag"] = r.headers.get("ETag")
     result["last_modified_raw"] = r.headers.get("Last-Modified")
-    result["last_modified_utc"] = parse_http_date(result["last_modified_raw"])
+    last_modified_iso, last_modified_dt = parse_http_date(result["last_modified_raw"])
+    result["last_modified_utc"] = last_modified_iso
+
+    # Compute age (days since last update)
+    if last_modified_dt is not None:
+        delta = now_utc - last_modified_dt
+        result["days_since_last_update"] = max(0, delta.days)
+
+    visual = build_age_visual(result["days_since_last_update"])
+    result.update(visual)
 
     # Try GET for hash, but don't fail if blocked
     try:
@@ -123,6 +172,22 @@ def main():
         "sha256": result["sha256"],
     }
     save_json(STATE_FILE, new_state)
+
+    # Visual console output for GitHub Actions logs
+    print("")
+    print("=== PDF Update Age Summary ===")
+    print("Today (UTC):           {}".format(result["today_date_utc"]))
+    print("Last Modified (UTC):   {}".format(result["last_modified_utc"]))
+    print("Days Since Update:     {}".format(result["days_since_last_update"]))
+    print("Status:                {}".format(result["visual_status"]))
+    print("Age Bar:               {}".format(result["visual_bar"]))
+    if result["hash_check_skipped"]:
+        print("Hash Check:            Skipped ({})".format(result["hash_check_reason"]))
+    else:
+        print("Hash Check:            Completed")
+    print("Changed This Run:      {}".format(result["changed"]))
+    print("==============================")
+    print("")
 
     print(json.dumps(result, indent=2))
     if result["changed"]:
