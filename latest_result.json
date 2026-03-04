@@ -12,8 +12,6 @@
   "sha256": null,
   "hash_check_skipped": true,
   "hash_check_reason": "GET blocked with status 403",
-  "changed": true,
-  "change_reasons": [
-    "content_length: None -> 480"
-  ]
+  "changed": false,
+  "change_reasons": []
 }
