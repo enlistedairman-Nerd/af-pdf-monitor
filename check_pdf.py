@@ -50,7 +50,6 @@ def build_age_visual(days_since):
             "status_color": "unknown",
         }
 
-    # Thresholds (edit if you want)
     if days_since <= 30:
         status = "🟢 Fresh"
         color = "green"
@@ -61,7 +60,6 @@ def build_age_visual(days_since):
         status = "🔴 Old"
         color = "red"
 
-    # Cap at 180 days for bar display
     cap = 180
     filled = max(0, min(10, round((min(days_since, cap) / cap) * 10)))
     bar = "■" * filled + "□" * (10 - filled)
@@ -85,6 +83,7 @@ def main():
     }
 
     now_utc = datetime.now(timezone.utc)
+    prev = load_state()
 
     result = {
         "url": PDF_URL,
@@ -106,11 +105,12 @@ def main():
         "sha256": None,
         "hash_check_skipped": False,
         "hash_check_reason": None,
+        "used_previous_last_modified": False,
         "changed": False,
         "change_reasons": [],
     }
 
-    # HEAD request for metadata
+    # 1) HEAD for metadata
     r = requests.head(PDF_URL, headers=headers, allow_redirects=True, timeout=30)
     result["method_used"] = "HEAD"
     result["http_status"] = r.status_code
@@ -119,44 +119,63 @@ def main():
     result["content_length"] = r.headers.get("Content-Length")
     result["etag"] = r.headers.get("ETag")
     result["last_modified_raw"] = r.headers.get("Last-Modified")
-    last_modified_iso, last_modified_dt = parse_http_date(result["last_modified_raw"])
-    result["last_modified_utc"] = last_modified_iso
 
-    # Compute age (days since last update)
-    if last_modified_dt is not None:
-        delta = now_utc - last_modified_dt
-        result["days_since_last_update"] = max(0, delta.days)
-
-    visual = build_age_visual(result["days_since_last_update"])
-    result.update(visual)
-
-    # Try GET for hash, but don't fail if blocked
+    # 2) Try GET for hash and as fallback source for Last-Modified header
     try:
         g = requests.get(PDF_URL, headers=headers, allow_redirects=True, timeout=60)
         if g.status_code < 400:
             result["sha256"] = sha256_bytes(g.content)
             result["method_used"] = "HEAD + GET"
+
+            # Fallback: if HEAD didn't provide Last-Modified, use GET headers
+            if not result["last_modified_raw"]:
+                result["last_modified_raw"] = g.headers.get("Last-Modified")
+            if not result["content_length"]:
+                result["content_length"] = g.headers.get("Content-Length")
+            if not result["etag"]:
+                result["etag"] = g.headers.get("ETag")
         else:
             result["hash_check_skipped"] = True
             result["hash_check_reason"] = "GET blocked with status {}".format(g.status_code)
+
+            # Even on error, sometimes headers are present; try them
+            if not result["last_modified_raw"]:
+                result["last_modified_raw"] = g.headers.get("Last-Modified")
+            if not result["content_length"]:
+                result["content_length"] = g.headers.get("Content-Length")
+            if not result["etag"]:
+                result["etag"] = g.headers.get("ETag")
     except Exception as e:
         result["hash_check_skipped"] = True
         result["hash_check_reason"] = "GET failed: {}".format(str(e))
 
+    # 3) Final fallback: previous saved Last-Modified
+    if not result["last_modified_raw"] and prev.get("last_modified_raw"):
+        result["last_modified_raw"] = prev.get("last_modified_raw")
+        result["used_previous_last_modified"] = True
+
+    # Parse the selected last-modified value
+    last_modified_iso, last_modified_dt = parse_http_date(result["last_modified_raw"])
+    result["last_modified_utc"] = last_modified_iso
+
+    # Compute age
+    if last_modified_dt is not None:
+        delta = now_utc - last_modified_dt
+        result["days_since_last_update"] = max(0, delta.days)
+
+    # Visuals
+    result.update(build_age_visual(result["days_since_last_update"]))
+
     if r.status_code < 400:
         result["checked_ok"] = True
 
-    prev = load_state()
-
+    # Compare changes (skip sha256 compare if hash unavailable)
     keys_to_compare = ["etag", "last_modified_raw", "content_length", "sha256"]
     for k in keys_to_compare:
         prev_val = prev.get(k)
         curr_val = result.get(k)
-
-        # Skip hash compare if no hash this run
         if k == "sha256" and curr_val is None:
             continue
-
         if prev_val != curr_val:
             result["change_reasons"].append("{}: {} -> {}".format(k, prev_val, curr_val))
 
@@ -173,7 +192,6 @@ def main():
     }
     save_json(STATE_FILE, new_state)
 
-    # Visual console output for GitHub Actions logs
     print("")
     print("=== PDF Update Age Summary ===")
     print("Today (UTC):           {}".format(result["today_date_utc"]))
@@ -181,6 +199,10 @@ def main():
     print("Days Since Update:     {}".format(result["days_since_last_update"]))
     print("Status:                {}".format(result["visual_status"]))
     print("Age Bar:               {}".format(result["visual_bar"]))
+    if result["used_previous_last_modified"]:
+        print("Date Source:           Previous saved value (fallback)")
+    else:
+        print("Date Source:           Current response headers")
     if result["hash_check_skipped"]:
         print("Hash Check:            Skipped ({})".format(result["hash_check_reason"]))
     else:
