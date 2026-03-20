@@ -5,11 +5,11 @@
   "method_used": "HEAD",
   "final_url": "https://static.e-publishing.af.mil/production/1/af_a1/publication/dafi36-2903/dafi36-2903.pdf",
   "content_type": "text/html",
-  "content_length": "482",
+  "content_length": "480",
   "etag": null,
   "last_modified_raw": null,
   "last_modified_utc": null,
-  "today_utc": "2026-03-20T14:33:32.638323+00:00",
+  "today_utc": "2026-03-20T19:51:32.756420+00:00",
   "today_date_utc": "2026-03-20",
   "days_since_last_update": null,
   "visual_status": "⚪ Unknown",
@@ -21,6 +21,6 @@
   "used_previous_last_modified": false,
   "changed": true,
   "change_reasons": [
-    "content_length: 480 -> 482"
+    "content_length: 482 -> 480"
   ]
 }
