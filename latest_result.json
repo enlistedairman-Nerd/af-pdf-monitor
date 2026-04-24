@@ -9,7 +9,7 @@
   "etag": null,
   "last_modified_raw": null,
   "last_modified_utc": null,
-  "today_utc": "2026-04-24T14:05:57.081999+00:00",
+  "today_utc": "2026-04-24T19:12:12.029470+00:00",
   "today_date_utc": "2026-04-24",
   "days_since_last_update": null,
   "visual_status": "⚪ Unknown",
@@ -19,8 +19,6 @@
   "hash_check_skipped": true,
   "hash_check_reason": "GET blocked with status 403",
   "used_previous_last_modified": false,
-  "changed": true,
-  "change_reasons": [
-    "content_length: 482 -> 480"
-  ]
+  "changed": false,
+  "change_reasons": []
 }
