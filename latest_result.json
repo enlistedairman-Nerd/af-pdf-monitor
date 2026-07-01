@@ -9,8 +9,8 @@
   "etag": null,
   "last_modified_raw": null,
   "last_modified_utc": null,
-  "today_utc": "2026-06-30T20:17:53.027153+00:00",
-  "today_date_utc": "2026-06-30",
+  "today_utc": "2026-07-01T04:53:06.455882+00:00",
+  "today_date_utc": "2026-07-01",
   "days_since_last_update": null,
   "visual_status": "⚪ Unknown",
   "visual_bar": "□□□□□□□□□□",
@@ -19,8 +19,6 @@
   "hash_check_skipped": true,
   "hash_check_reason": "GET blocked with status 403",
   "used_previous_last_modified": false,
-  "changed": true,
-  "change_reasons": [
-    "content_length: 482 -> 480"
-  ]
+  "changed": false,
+  "change_reasons": []
 }
